@@ -1,16 +1,6 @@
-import React, { useState } from 'react';
-import astData from './ast-data.json';
+import React, { useState, useEffect, useRef } from 'react';
+import { demoCSS } from './demo-css.js';
 import { TreeNode } from './TreeNode.jsx';
-
-function NodeDetailValue({ label, value }) {
-  if (value === undefined || value === null) return null;
-  return (
-    <div className="flex items-baseline gap-2 py-1">
-      <span className="text-text-muted text-xs font-medium uppercase tracking-wider shrink-0">{label}</span>
-      <span className="text-text-secondary font-mono text-sm break-all">{String(value)}</span>
-    </div>
-  );
-}
 
 function SourceBadge({ source }) {
   if (!source?.start) return null;
@@ -25,8 +15,68 @@ function SourceBadge({ source }) {
   );
 }
 
+async function parseCSSViaServer(cssText) {
+  const res = await fetch('/api/parse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ css: cssText }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Parse failed');
+  }
+  return res.json();
+}
+
 export default function App() {
   const [selected, setSelected] = useState(null);
+  const [astData, setAstData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [fileName, setFileName] = useState('demo.css');
+  const fileInputRef = useRef(null);
+
+  // Load demo CSS on mount
+  useEffect(() => {
+    parseCSSViaServer(demoCSS)
+      .then(ast => { setAstData(ast); setLoading(false); })
+      .catch(err => { setError(err.message); setLoading(false); });
+  }, []);
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setLoading(true);
+      setError(null);
+      setSelected(null);
+      const text = await file.text();
+      const ast = await parseCSSViaServer(text);
+      setAstData(ast);
+      setFileName(file.name);
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+    // Reset input so the same file can be re-uploaded
+    e.target.value = '';
+  };
+
+  const handleLoadDemo = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setSelected(null);
+      const ast = await parseCSSViaServer(demoCSS);
+      setAstData(ast);
+      setFileName('demo.css');
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-surface-0 text-text-secondary font-sans flex flex-col">
@@ -43,20 +93,67 @@ export default function App() {
           <span className="px-2 py-0.5 text-xs font-medium text-text-muted bg-surface-3 rounded-md border border-border-subtle">
             PostCSS Parse Tree
           </span>
+          <span className="px-2 py-0.5 text-xs font-mono text-text-faint bg-surface-2 rounded-md border border-border-subtle" data-testid="file-name">
+            {fileName}
+          </span>
         </div>
-        <div className="flex items-center gap-2 text-xs text-text-faint">
-          <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-node-root" />root
-          </span>
-          <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-node-atrule" />atrule
-          </span>
-          <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-node-rule" />rule
-          </span>
-          <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-node-decl" />decl
-          </span>
+
+        <div className="flex items-center gap-3">
+          {/* File upload button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".css"
+            onChange={handleFileUpload}
+            className="hidden"
+            data-testid="file-input"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            data-testid="upload-btn"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md
+                       bg-accent-purple/15 text-accent-purple border border-accent-purple/25
+                       hover:bg-accent-purple/25 transition-colors cursor-pointer"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Load CSS File
+          </button>
+
+          {/* Demo button */}
+          {fileName !== 'demo.css' && (
+            <button
+              onClick={handleLoadDemo}
+              data-testid="demo-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
+                         bg-surface-3 text-text-muted border border-border-subtle
+                         hover:bg-surface-4 hover:text-text-secondary transition-colors cursor-pointer"
+            >
+              Demo
+            </button>
+          )}
+
+          {/* Legend */}
+          <div className="flex items-center gap-2 text-xs text-text-faint ml-2">
+            <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-node-root" />root
+            </span>
+            <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-node-atrule" />atrule
+            </span>
+            <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-node-rule" />rule
+            </span>
+            <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-node-decl" />decl
+            </span>
+            <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-node-comment" />comment
+            </span>
+          </div>
         </div>
       </header>
 
@@ -64,7 +161,23 @@ export default function App() {
       <div className="flex h-[calc(100vh-53px)]">
         {/* Tree panel */}
         <div className="flex-1 overflow-auto py-2">
-          <TreeNode node={astData} depth={0} selected={selected} onSelect={setSelected} />
+          {loading && (
+            <div className="flex items-center justify-center h-full text-text-faint">
+              <svg className="w-5 h-5 animate-spin mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" />
+              </svg>
+              Parsing CSS...
+            </div>
+          )}
+          {error && (
+            <div className="m-4 p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-mono">
+              Parse error: {error}
+            </div>
+          )}
+          {!loading && !error && astData && (
+            <TreeNode node={astData} depth={0} selected={selected} onSelect={setSelected} />
+          )}
         </div>
 
         {/* Detail panel - fixed height, independent scroll */}
@@ -120,6 +233,18 @@ export default function App() {
                     <div className="px-4 py-3">
                       <div className="text-[10px] font-semibold uppercase tracking-widest text-text-faint mb-1">Value</div>
                       <code className="text-sm font-mono text-text-primary">{selected.value}</code>
+                    </div>
+                  )}
+                  {selected.important && (
+                    <div className="px-4 py-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-widest text-text-faint mb-1">Important</div>
+                      <span className="text-xs font-mono text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded">!important</span>
+                    </div>
+                  )}
+                  {selected.text !== undefined && (
+                    <div className="px-4 py-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-widest text-text-faint mb-1">Comment</div>
+                      <code className="text-sm font-mono text-node-comment whitespace-pre-wrap">{selected.text}</code>
                     </div>
                   )}
                   {selected.childCount !== undefined && (

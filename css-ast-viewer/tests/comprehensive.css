@@ -1,0 +1,413 @@
+/* === Global Reset === */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* @charset declaration */
+@charset "UTF-8";
+
+/* @import rules */
+@import url('https://fonts.googleapis.com/css2?family=Inter');
+@import 'reset.css';
+
+/* @font-face */
+@font-face {
+  font-family: 'CustomFont';
+  src: url('/fonts/custom.woff2') format('woff2'),
+       url('/fonts/custom.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* CSS Custom Properties */
+:root {
+  --color-primary: #3b82f6;
+  --color-secondary: rgb(99, 102, 241);
+  --color-accent: hsl(280, 67%, 60%);
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 2rem;
+  --font-size-base: 16px;
+  --transition-fast: 150ms ease-in-out;
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Basic selectors */
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+  color: #1f2937;
+  background-color: #f9fafb;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* ID and class selectors */
+#main-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--spacing-lg);
+}
+
+.card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-md);
+}
+
+/* Complex selectors */
+.nav > ul > li > a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.sidebar ~ .content {
+  margin-left: 280px;
+}
+
+.parent + .sibling {
+  margin-top: var(--spacing-sm);
+}
+
+/* Attribute selectors */
+input[type="text"] {
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+}
+
+a[href^="https"] {
+  color: var(--color-primary);
+}
+
+a[href$=".pdf"] {
+  color: red;
+}
+
+[data-theme="dark"] {
+  --color-primary: #60a5fa;
+  background: #111827;
+  color: #f9fafb;
+}
+
+/* Pseudo-classes */
+a:hover {
+  text-decoration: underline;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+li:first-child {
+  margin-top: 0;
+}
+
+li:last-child {
+  margin-bottom: 0;
+}
+
+li:nth-child(odd) {
+  background: #f3f4f6;
+}
+
+li:nth-child(2n+1) {
+  font-style: italic;
+}
+
+input:not(:disabled) {
+  cursor: pointer;
+}
+
+.form-field:has(> input:invalid) {
+  border-color: red;
+}
+
+:is(h1, h2, h3):where(.title) {
+  color: var(--color-primary);
+}
+
+/* Pseudo-elements */
+.quote::before {
+  content: '\201C';
+  font-size: 2em;
+  color: var(--color-accent);
+}
+
+.quote::after {
+  content: '\201D';
+}
+
+p::first-line {
+  font-weight: 600;
+}
+
+p::first-letter {
+  font-size: 2em;
+  float: left;
+  margin-right: 4px;
+}
+
+::selection {
+  background: var(--color-primary);
+  color: white;
+}
+
+::placeholder {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* !important */
+.override {
+  color: red !important;
+  display: block !important;
+}
+
+/* @media queries */
+@media (max-width: 768px) {
+  #main-container {
+    padding: var(--spacing-sm);
+  }
+
+  .card {
+    border-radius: 0;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1440px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-primary: #60a5fa;
+    color-scheme: dark;
+  }
+  body {
+    background: #0f172a;
+    color: #e2e8f0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none;
+  }
+  body {
+    font-size: 12pt;
+    color: black;
+  }
+}
+
+/* @keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-fade {
+  animation: fadeIn 300ms var(--transition-fast);
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* @supports */
+@supports (display: grid) {
+  .grid-layout {
+    display: grid;
+    gap: var(--spacing-md);
+  }
+}
+
+@supports not (backdrop-filter: blur(10px)) {
+  .glass {
+    background: rgba(255, 255, 255, 0.9);
+  }
+}
+
+/* @layer */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+}
+
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .btn-primary {
+    background: var(--color-primary);
+    color: white;
+  }
+  .btn-primary:hover {
+    filter: brightness(1.1);
+  }
+}
+
+/* CSS Grid */
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-rows: auto;
+  grid-auto-flow: dense;
+  gap: var(--spacing-md);
+}
+
+.grid-span-2 {
+  grid-column: span 2;
+}
+
+/* CSS Flexbox */
+.flex-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+/* Transitions and transforms */
+.card-interactive {
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.card-interactive:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* CSS Nesting (native) */
+.dialog {
+  padding: var(--spacing-lg);
+  background: white;
+
+  & .dialog-header {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-md);
+  }
+
+  & .dialog-body {
+    color: #4b5563;
+  }
+
+  & .dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+  }
+}
+
+/* @container queries */
+@container (min-width: 400px) {
+  .container-card {
+    flex-direction: row;
+  }
+}
+
+/* @scope (newer CSS) */
+@scope (.card) to (.card-body) {
+  a {
+    color: var(--color-primary);
+  }
+}
+
+/* Multiline comments */
+/*
+  This is a multiline comment
+  explaining the purpose of these
+  utility classes below
+*/
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aspect-video {
+  aspect-ratio: 16 / 9;
+}
+
+.backdrop-blur {
+  backdrop-filter: blur(12px);
+}
+
+/* CSS counters */
+ol.custom-list {
+  counter-reset: item;
+  list-style: none;
+}
+
+ol.custom-list > li::before {
+  counter-increment: item;
+  content: counter(item) ". ";
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+/* Scroll behavior */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
+}
+
+/* Container type */
+.responsive-panel {
+  container-type: inline-size;
+  container-name: panel;
+}

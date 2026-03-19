@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "node server.js & vite",
+    "server": "node server.js",
     "parse": "node parse-css.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

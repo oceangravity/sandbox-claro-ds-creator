@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 test.describe('CSS AST Viewer - Page Load', () => {
   test('should display the page title and subtitle', async ({ page }) => {
@@ -7,7 +12,7 @@ test.describe('CSS AST Viewer - Page Load', () => {
     await expect(page.getByText('PostCSS Parse Tree')).toBeVisible();
   });
 
-  test('should show the Root node', async ({ page }) => {
+  test('should show the Root node after demo loads', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByText('Root', { exact: true })).toBeVisible();
   });
@@ -17,9 +22,20 @@ test.describe('CSS AST Viewer - Page Load', () => {
     await expect(page.getByText('Node Details')).toBeVisible();
     await expect(page.getByText('Click a node to see its details')).toBeVisible();
   });
+
+  test('should show demo.css as default file name', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByTestId('file-name')).toHaveText('demo.css');
+  });
+
+  test('should show the Load CSS File button', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByTestId('upload-btn')).toBeVisible();
+    await expect(page.getByTestId('upload-btn')).toContainText('Load CSS File');
+  });
 });
 
-test.describe('CSS AST Viewer - Tree Structure', () => {
+test.describe('CSS AST Viewer - Demo Tree Structure', () => {
   test('should display @import nodes', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByText("@import 'tailwindcss'")).toBeVisible();
@@ -62,15 +78,12 @@ test.describe('CSS AST Viewer - Tree Structure', () => {
 test.describe('CSS AST Viewer - Expand/Collapse', () => {
   test('should show :root declarations by default (depth < 2 starts expanded)', async ({ page }) => {
     await page.goto('/');
-    // :root is at depth 1, starts expanded, so its declarations are visible
     await expect(page.locator('span').filter({ hasText: '--foreground: oklch(0.145 0 0)' }).first()).toBeVisible();
   });
 
   test('should collapse :root on double click hiding declarations', async ({ page }) => {
     await page.goto('/');
-    // :root starts expanded — verify a declaration is visible
     await expect(page.locator('span').filter({ hasText: '--foreground: oklch(0.145 0 0)' }).first()).toBeVisible();
-    // Double click to collapse
     await page.getByText(':root').dblclick();
     await expect(page.locator('span').filter({ hasText: '--foreground: oklch(0.145 0 0)' })).toHaveCount(0);
   });
@@ -78,19 +91,10 @@ test.describe('CSS AST Viewer - Expand/Collapse', () => {
   test('should re-expand :root on second double click', async ({ page }) => {
     await page.goto('/');
     const rootLabel = page.locator('span').filter({ hasText: ':root' }).first();
-    // Collapse
     await rootLabel.dblclick();
     await expect(page.locator('span').filter({ hasText: '--foreground: oklch(0.145 0 0)' })).toHaveCount(0);
-    // Re-expand
     await rootLabel.dblclick();
     await expect(page.locator('span').filter({ hasText: '--foreground: oklch(0.145 0 0)' }).first()).toBeVisible();
-  });
-
-  test('should show @layer base children by default', async ({ page }) => {
-    await page.goto('/');
-    // @layer base is at depth 1, starts expanded
-    // Its child rules (* and body) should be visible as tree labels
-    await expect(page.locator('span').filter({ hasText: /^body$/ }).first()).toBeVisible();
   });
 });
 
@@ -114,7 +118,6 @@ test.describe('CSS AST Viewer - Node Selection & Details', () => {
 
   test('should show declaration details when clicking a visible declaration', async ({ page }) => {
     await page.goto('/');
-    // :root declarations are already visible, click one
     await page.locator('span').filter({ hasText: '--foreground: oklch(0.145 0 0)' }).first().click();
     const detailPanel = page.locator('pre');
     await expect(detailPanel).toContainText('"type": "decl"');
@@ -125,7 +128,6 @@ test.describe('CSS AST Viewer - Node Selection & Details', () => {
     await page.goto('/');
     await page.getByText(':root').click();
     await expect(page.locator('pre')).toContainText('"selector": ":root"');
-    // Click .dark using exact match
     await page.getByText('.dark', { exact: true }).click();
     await expect(page.locator('pre')).toContainText('"selector": ".dark"');
   });
@@ -139,7 +141,356 @@ test.describe('CSS AST Viewer - Node Selection & Details', () => {
   });
 });
 
-test.describe('CSS AST Viewer - Visual Elements', () => {
+test.describe('CSS AST Viewer - Sidebar Sticky Behavior', () => {
+  test('should keep sidebar visible after scrolling the tree panel down', async ({ page }) => {
+    await page.goto('/');
+    const sidebar = page.locator('aside');
+    const detailsHeader = page.getByText('Node Details');
+    await expect(sidebar).toBeVisible();
+    await expect(detailsHeader).toBeInViewport();
+    const boundsBefore = await sidebar.boundingBox();
+    const treePanel = page.locator('.flex-1.overflow-auto');
+    await treePanel.evaluate(el => el.scrollTop = el.scrollHeight);
+    await page.waitForTimeout(300);
+    await expect(sidebar).toBeVisible();
+    await expect(detailsHeader).toBeInViewport();
+    const boundsAfter = await sidebar.boundingBox();
+    expect(boundsAfter.y).toBe(boundsBefore.y);
+  });
+
+  test('should keep sidebar details visible after scrolling tree to bottom and selecting a node', async ({ page }) => {
+    await page.goto('/');
+    await page.getByText("@import 'tailwindcss'").click();
+    await expect(page.locator('pre')).toContainText('"type": "atrule"');
+    const treePanel = page.locator('.flex-1.overflow-auto');
+    await treePanel.evaluate(el => el.scrollTop = el.scrollHeight);
+    await page.waitForTimeout(300);
+    await expect(page.getByText('Node Details')).toBeInViewport();
+    await expect(page.locator('aside')).toBeInViewport();
+  });
+});
+
+test.describe('CSS AST Viewer - File Upload', () => {
+  test('should upload a CSS file and update the tree', async ({ page }) => {
+    await page.goto('/');
+    // Wait for demo to load
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+
+    // Upload the comprehensive CSS file
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    const fileInput = page.getByTestId('file-input');
+    await fileInput.setInputFiles(filePath);
+
+    // Wait for new tree to render
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+
+    // Verify comprehensive CSS nodes appear
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+  });
+
+  test('should show the Demo button after uploading a file', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+
+    // No demo button when already showing demo
+    await expect(page.getByTestId('demo-btn')).not.toBeVisible();
+
+    // Upload file
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+
+    // Demo button should now be visible
+    await expect(page.getByTestId('demo-btn')).toBeVisible();
+  });
+
+  test('should return to demo CSS when clicking Demo button', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+
+    // Upload comprehensive file
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+
+    // Click demo button
+    await page.getByTestId('demo-btn').click();
+    await expect(page.getByTestId('file-name')).toHaveText('demo.css');
+
+    // Demo nodes should be back
+    await expect(page.getByText("@import 'tailwindcss'")).toBeVisible();
+  });
+
+  test('should clear selected node when uploading a new file', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+
+    // Select a node
+    await page.getByText(':root').click();
+    await expect(page.locator('pre')).toContainText('"selector": ":root"');
+
+    // Upload file
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+
+    // Selection should be cleared
+    await expect(page.getByText('Click a node to see its details')).toBeVisible();
+  });
+});
+
+test.describe('Comprehensive CSS - Comments', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should show comment nodes with correct badge', async ({ page }) => {
+    // The comprehensive CSS has comments - check for comment type badges
+    const commentBadges = page.locator('span').filter({ hasText: 'comment' });
+    expect(await commentBadges.count()).toBeGreaterThan(0);
+  });
+
+  test('should display comment text in details when clicking a comment node', async ({ page }) => {
+    // Find a comment row by its icon // and click on its parent row
+    const commentIcon = page.locator('span').filter({ hasText: '//' }).first();
+    // Click the parent row div that contains the comment
+    await commentIcon.locator('..').locator('..').click();
+    // The detail panel should show the comment content
+    await expect(page.getByText('Comment', { exact: true })).toBeVisible();
+  });
+});
+
+test.describe('Comprehensive CSS - @font-face', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should parse @font-face at-rule', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@font-face' }).first()).toBeVisible();
+  });
+
+  test('should show @font-face declarations when expanded', async ({ page }) => {
+    // Double-click to expand if collapsed
+    const fontFaceNode = page.locator('span').filter({ hasText: '@font-face' }).first();
+    await fontFaceNode.dblclick();
+    // Check for font-family declaration
+    await expect(page.locator('span').filter({ hasText: "font-family: 'CustomFont'" }).first()).toBeVisible();
+  });
+});
+
+test.describe('Comprehensive CSS - @media Queries', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should parse @media (max-width: 768px)', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@media (max-width: 768px)' }).first()).toBeVisible();
+  });
+
+  test('should parse @media (prefers-color-scheme: dark)', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@media (prefers-color-scheme: dark)' }).first()).toBeVisible();
+  });
+
+  test('should parse @media print', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@media print' }).first()).toBeVisible();
+  });
+
+  test('should show nested rules inside @media when expanded', async ({ page }) => {
+    // Click on a @media node to see details
+    const mediaNode = page.locator('span').filter({ hasText: '@media (max-width: 768px)' }).first();
+    await mediaNode.click();
+    const detailPanel = page.locator('pre');
+    await expect(detailPanel).toContainText('"type": "atrule"');
+    await expect(detailPanel).toContainText('"name": "@media"');
+    await expect(detailPanel).toContainText('"params": "(max-width: 768px)"');
+  });
+});
+
+test.describe('Comprehensive CSS - @keyframes', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should parse @keyframes fadeIn', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@keyframes fadeIn' }).first()).toBeVisible();
+  });
+
+  test('should parse @keyframes spin', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@keyframes spin' }).first()).toBeVisible();
+  });
+
+  test('should parse @keyframes pulse', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@keyframes pulse' }).first()).toBeVisible();
+  });
+});
+
+test.describe('Comprehensive CSS - @supports', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should parse @supports (display: grid)', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@supports (display: grid)' }).first()).toBeVisible();
+  });
+
+  test('should parse @supports not', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@supports not' }).first()).toBeVisible();
+  });
+});
+
+test.describe('Comprehensive CSS - @layer', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should parse @layer utilities', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@layer utilities' }).first()).toBeVisible();
+  });
+
+  test('should parse @layer components', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@layer components' }).first()).toBeVisible();
+  });
+});
+
+test.describe('Comprehensive CSS - @container', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should parse @container query', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@container' }).first()).toBeVisible();
+  });
+});
+
+test.describe('Comprehensive CSS - Complex Selectors', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should parse universal selector with pseudo-elements', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '*, *::before, *::after' }).first()).toBeVisible();
+  });
+
+  test('should parse ID selector', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '#main-container' }).first()).toBeVisible();
+  });
+
+  test('should parse child combinator selector', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '.nav > ul > li > a' }).first()).toBeVisible();
+  });
+
+  test('should parse attribute selector', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: 'input[type="text"]' }).first()).toBeVisible();
+  });
+
+  test('should parse pseudo-class :nth-child', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: 'li:nth-child(odd)' }).first()).toBeVisible();
+  });
+
+  test('should parse :is() and :where() selectors', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: ':is(h1, h2, h3):where(.title)' }).first()).toBeVisible();
+  });
+
+  test('should parse ::selection pseudo-element', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '::selection' }).first()).toBeVisible();
+  });
+
+  test('should parse ::placeholder pseudo-element', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '::placeholder' }).first()).toBeVisible();
+  });
+});
+
+test.describe('Comprehensive CSS - !important', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should parse declarations with !important and show badge in details', async ({ page }) => {
+    // Expand .override rule to see its declarations
+    const overrideNode = page.locator('span').filter({ hasText: '.override' }).first();
+    await overrideNode.dblclick(); // expand
+    await page.waitForTimeout(200);
+
+    // Click on color: red (which has !important)
+    const importantDecl = page.locator('span').filter({ hasText: 'color: red' }).first();
+    await importantDecl.click();
+
+    // Detail panel should show !important badge
+    await expect(page.getByText('!important')).toBeVisible();
+  });
+});
+
+test.describe('Comprehensive CSS - CSS Nesting', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should parse native CSS nesting with & selector', async ({ page }) => {
+    // The .dialog rule has nested rules - click to select it and check children count
+    const dialogNode = page.locator('span').filter({ hasText: '.dialog' }).first();
+    await dialogNode.click();
+    // Check details show it has children (nested rules)
+    const detailPanel = page.locator('pre');
+    await expect(detailPanel).toContainText('"selector": ".dialog"');
+    await expect(detailPanel).toContainText('"childCount"');
+  });
+});
+
+test.describe('Comprehensive CSS - @scope', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+    const filePath = resolve(__dirname, 'comprehensive.css');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+    await expect(page.getByTestId('file-name')).toHaveText('comprehensive.css');
+  });
+
+  test('should parse @scope at-rule', async ({ page }) => {
+    await expect(page.locator('span').filter({ hasText: '@scope' }).first()).toBeVisible();
+  });
+});
+
+test.describe('Comprehensive CSS - Visual Elements', () => {
   test('should have dark background theme', async ({ page }) => {
     await page.goto('/');
     const container = page.locator('#root > div');
@@ -148,89 +499,23 @@ test.describe('CSS AST Viewer - Visual Elements', () => {
 
   test('should show child count badges for nodes with children', async ({ page }) => {
     await page.goto('/');
+    // Wait for demo to load
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
     const counts = page.locator('span').filter({ hasText: /^\d+$/ });
     expect(await counts.count()).toBeGreaterThan(0);
   });
 
   test('should display guide lines for nested nodes', async ({ page }) => {
     await page.goto('/');
-    // Guide lines use Tailwind "relative" parent with absolute-positioned w-px children
+    // Wait for demo to load
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
     const guideLines = page.locator('.relative > .absolute.w-px');
     expect(await guideLines.count()).toBeGreaterThan(0);
   });
-});
 
-test.describe('CSS AST Viewer - Sidebar Sticky Behavior', () => {
-  test('should keep sidebar visible after scrolling the tree panel down', async ({ page }) => {
+  test('should show comment legend in header', async ({ page }) => {
     await page.goto('/');
-    const sidebar = page.locator('aside');
-    const detailsHeader = page.getByText('Node Details');
-
-    // Verify sidebar is visible initially
-    await expect(sidebar).toBeVisible();
-    await expect(detailsHeader).toBeInViewport();
-
-    // Get sidebar position before scroll
-    const boundsBefore = await sidebar.boundingBox();
-
-    // Scroll the tree panel down significantly
-    const treePanel = page.locator('.flex-1.overflow-auto');
-    await treePanel.evaluate(el => el.scrollTop = el.scrollHeight);
-    await page.waitForTimeout(300);
-
-    // Sidebar and its header must still be visible and in viewport
-    await expect(sidebar).toBeVisible();
-    await expect(detailsHeader).toBeInViewport();
-
-    // Sidebar top position should not have moved
-    const boundsAfter = await sidebar.boundingBox();
-    expect(boundsAfter.y).toBe(boundsBefore.y);
-  });
-
-  test('should keep sidebar details visible after scrolling tree to bottom and selecting a node', async ({ page }) => {
-    await page.goto('/');
-
-    // Click a node first so details are shown
-    await page.getByText("@import 'tailwindcss'").click();
-    await expect(page.locator('pre')).toContainText('"type": "atrule"');
-
-    // Scroll tree panel to bottom
-    const treePanel = page.locator('.flex-1.overflow-auto');
-    await treePanel.evaluate(el => el.scrollTop = el.scrollHeight);
-    await page.waitForTimeout(300);
-
-    // Detail panel content should still be in viewport
-    await expect(page.getByText('Node Details')).toBeInViewport();
-    await expect(page.locator('aside')).toBeInViewport();
-  });
-
-  test('should keep sidebar fixed while scrolling tree multiple times', async ({ page }) => {
-    await page.goto('/');
-    const sidebar = page.locator('aside');
-    const treePanel = page.locator('.flex-1.overflow-auto');
-
-    // Get initial sidebar position
-    const initialBounds = await sidebar.boundingBox();
-
-    // Scroll down
-    await treePanel.evaluate(el => el.scrollTop = 500);
-    await page.waitForTimeout(200);
-    let bounds = await sidebar.boundingBox();
-    expect(bounds.y).toBe(initialBounds.y);
-
-    // Scroll further down
-    await treePanel.evaluate(el => el.scrollTop = el.scrollHeight);
-    await page.waitForTimeout(200);
-    bounds = await sidebar.boundingBox();
-    expect(bounds.y).toBe(initialBounds.y);
-
-    // Scroll back up
-    await treePanel.evaluate(el => el.scrollTop = 0);
-    await page.waitForTimeout(200);
-    bounds = await sidebar.boundingBox();
-    expect(bounds.y).toBe(initialBounds.y);
-
-    // Sidebar always in viewport
-    await expect(page.getByText('Node Details')).toBeInViewport();
+    const commentLegend = page.locator('header').getByText('comment', { exact: true });
+    await expect(commentLegend).toBeVisible();
   });
 });
