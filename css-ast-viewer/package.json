@@ -1,21 +1,31 @@
 {
   "name": "css-ast-viewer",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Herramienta visual para parsear CSS y explorar su AST como arbol interactivo",
+  "main": "server.ts",
   "scripts": {
-    "dev": "node server.js & vite",
-    "server": "node server.js",
-    "parse": "node parse-css.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "run-p server dev:vite",
+    "dev:vite": "vite",
+    "server": "tsx server.ts",
+    "parse": "tsx parse-css.ts",
+    "test": "tsx --test tests/node-to-json.test.js && npx playwright test",
+    "test:unit": "tsx --test tests/node-to-json.test.js",
+    "test:e2e": "npx playwright test",
+    "test:e2e:headed": "npx playwright test --headed",
+    "typecheck": "tsc --noEmit"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "css",
+    "ast",
+    "parser",
+    "postcss",
+    "viewer"
+  ],
+  "author": "Juan Carlos Galindo Navarro",
   "license": "ISC",
   "type": "module",
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",
-    "cors": "^2.8.6",
     "express": "^5.2.1",
     "postcss": "^8.5.8",
     "react": "^19.2.4",
@@ -24,7 +34,13 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "@types/express": "^5.0.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "npm-run-all2": "^8.0.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "vite": "^8.0.1"
   }
 }

@@ -5,10 +5,21 @@ export default defineConfig({
   timeout: 30000,
   use: {
     baseURL: 'http://localhost:3333',
-    headless: false,
-    slowMo: 300,
+    headless: true,
   },
   projects: [
     { name: 'chromium', use: { browserName: 'chromium' } },
+  ],
+  webServer: [
+    {
+      command: 'npx tsx server.ts',
+      port: 3334,
+      reuseExistingServer: true,
+    },
+    {
+      command: 'npx vite --port 3333',
+      port: 3333,
+      reuseExistingServer: true,
+    },
   ],
 });

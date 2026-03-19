@@ -13,29 +13,34 @@ Utiliza **PostCSS** en el servidor para generar el AST y **React** con **Tailwin
   - Comentarios CSS (`/* ... */`)
   - CSS Nesting nativo (`& .child`)
   - Custom properties (`--variable`)
-- **Arbol interactivo** con expand/collapse por doble click
-- **Panel de detalles** fijo en el sidebar derecho con informacion del nodo seleccionado (tipo, selector, propiedades, ubicacion en el archivo fuente, JSON raw)
-- **Carga de archivos CSS** desde disco mediante boton de upload
+- **Arbol interactivo** con expand/collapse por doble click y navegacion con teclado (Enter, flechas)
+- **Panel de detalles** fijo en el sidebar derecho con informacion del nodo seleccionado
+- **Carga de archivos CSS** desde disco mediante boton de upload con validacion de tipo y tamanio
 - **CSS de demo** incluido (configuracion Tailwind/shadcn) cargado por defecto
 - **Leyenda visual** con colores por tipo de nodo: root, atrule, rule, decl, comment
-- **Servidor Express** con API REST, preparado para extender con mas funcionalidades (escritura de archivos, transformaciones, etc.)
+- **Servidor Express** con API REST, preparado para extender con mas funcionalidades
+- **Accesibilidad**: roles ARIA, aria-labels, navegacion por teclado, focus visible
 
 ## Arquitectura
 
 ```
 css-ast-viewer/
-  server.js            # API Express (POST /api/parse)
-  parse-css.js         # Script standalone para parsear CSS a JSON
-  vite.config.js       # Vite + Tailwind 4 + proxy al API
+  server.js              # API Express (POST /api/parse)
+  lib/
+    node-to-json.js      # Modulo compartido: convierte AST PostCSS a JSON
+  parse-css.js           # Script standalone para parsear CSS a JSON
+  vite.config.js         # Vite + Tailwind 4 + proxy al API
+  playwright.config.js   # Config Playwright con webServer automatico
   src/
-    App.jsx            # Componente principal con upload y panel de detalles
-    TreeNode.jsx       # Componente recursivo del arbol
-    demo-css.js        # CSS de demo embebido
-    index.css          # Estilos base con Tailwind 4
-    main.jsx           # Entry point de React
+    App.jsx              # Componente principal con upload y panel de detalles
+    TreeNode.jsx         # Componente recursivo del arbol (memo + useCallback)
+    demo-css.js          # CSS de demo embebido
+    index.css            # Estilos base con Tailwind 4
+    main.jsx             # Entry point de React
   tests/
-    ast-viewer.spec.js   # 57 tests e2e con Playwright
-    comprehensive.css    # CSS de prueba con todas las features del lenguaje
+    node-to-json.test.js   # 20 unit tests (node:test)
+    ast-viewer.spec.js     # 62 tests e2e con Playwright
+    comprehensive.css      # CSS de prueba con todas las features del lenguaje
 ```
 
 ## Requisitos
@@ -58,11 +63,11 @@ npx playwright install chromium
 Levantar el servidor API y Vite simultaneamente:
 
 ```bash
-# Opcion 1: ambos juntos
+# Ambos juntos (cross-platform via npm-run-all2)
 npm run dev
 
-# Opcion 2: por separado (recomendado)
-npm run server   # Express en puerto 3334
+# Por separado
+npm run server         # Express en puerto 3334
 npx vite --port 3333   # Vite en puerto 3333
 ```
 
@@ -71,15 +76,23 @@ Abrir http://localhost:3333 en el navegador.
 ### Cargar un archivo CSS
 
 1. Hacer click en el boton **"Load CSS File"** en la barra superior
-2. Seleccionar un archivo `.css` del disco
+2. Seleccionar un archivo `.css` del disco (maximo 5MB)
 3. El arbol se actualiza con el AST del archivo cargado
 4. Para volver al demo, hacer click en el boton **"Demo"**
+
+### Navegacion por teclado
+
+- **Tab**: navegar entre nodos del arbol
+- **Enter / Espacio**: seleccionar nodo y ver detalles
+- **Flecha derecha**: expandir nodo con hijos
+- **Flecha izquierda**: colapsar nodo con hijos
 
 ### Solo parsear (sin UI)
 
 ```bash
-# Genera src/ast-data.json a partir de input.css
+# Genera src/ast-data.json a partir de input.css (o archivo especificado)
 npm run parse
+node parse-css.js mi-archivo.css
 ```
 
 ## API
@@ -122,7 +135,19 @@ Recibe CSS como texto y devuelve el AST en formato JSON.
 
 ## Tests
 
-57 tests end-to-end con Playwright cubriendo:
+82 tests totales: 20 unit + 62 e2e.
+
+### Unit tests (node:test)
+
+20 tests para la funcion `nodeToJSON` cubriendo todos los tipos de nodo, edge cases y null safety.
+
+```bash
+npm run test:unit
+```
+
+### E2E tests (Playwright)
+
+62 tests cubriendo la interfaz completa:
 
 | Suite | Tests | Que cubre |
 |---|---|---|
@@ -132,6 +157,8 @@ Recibe CSS como texto y devuelve el AST en formato JSON.
 | Node Selection | 5 | Click para seleccionar, detalles de rule/atrule/decl, source location |
 | Sidebar Sticky | 2 | Sidebar fijo al hacer scroll en el arbol |
 | File Upload | 4 | Upload CSS, boton Demo, limpieza de seleccion |
+| File Validation | 2 | Rechazo de archivos no-CSS, tree preservado en error |
+| API Error Handling | 3 | CSS vacio, campo faltante, respuesta correcta |
 | Comments | 2 | Nodos comment, detalles de comentario |
 | @font-face | 2 | Parsing y declaraciones |
 | @media | 4 | Queries variadas, reglas anidadas |
@@ -146,21 +173,25 @@ Recibe CSS como texto y devuelve el AST en formato JSON.
 | Visual Elements | 4 | Tema oscuro, child counts, guide lines, leyenda |
 
 ```bash
-# Ejecutar los tests (requiere que los servidores esten corriendo)
-npx playwright test
+# E2E (auto-levanta servidores)
+npm run test:e2e
 
-# Con UI visible (headless: false ya esta configurado)
-npx playwright test --headed
+# E2E con navegador visible
+npm run test:e2e:headed
+
+# Todos los tests (unit + e2e)
+npm test
 ```
 
 ## Stack tecnologico
 
 - **PostCSS 8** - Parser de CSS
 - **Express 5** - Servidor API
-- **React 19** - UI
+- **React 19** - UI (memo, useCallback, useMemo)
 - **Tailwind CSS 4** - Estilos
 - **Vite 8** - Bundler y dev server
 - **Playwright** - Tests e2e
+- **node:test** - Tests unitarios
 
 ## Autor
 

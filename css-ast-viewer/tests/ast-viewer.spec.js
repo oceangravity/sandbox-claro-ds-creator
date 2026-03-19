@@ -519,3 +519,88 @@ test.describe('Comprehensive CSS - Visual Elements', () => {
     await expect(commentLegend).toBeVisible();
   });
 });
+
+test.describe('File Upload - Validation', () => {
+  test('should reject non-CSS files with error message', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+
+    // Create a temporary .txt file path (use the package.json as a non-css file)
+    const filePath = resolve(__dirname, '..', 'package.json');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+
+    // Should show error
+    await expect(page.getByTestId('error-msg')).toBeVisible();
+    await expect(page.getByTestId('error-msg')).toContainText('no es un archivo CSS');
+
+    // File name should not change
+    await expect(page.getByTestId('file-name')).toHaveText('demo.css');
+  });
+
+  test('should keep demo tree when file validation fails', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+
+    // Try to upload invalid file
+    const filePath = resolve(__dirname, '..', 'package.json');
+    await page.getByTestId('file-input').setInputFiles(filePath);
+
+    // Demo tree should still be visible
+    await expect(page.getByText("@import 'tailwindcss'")).toBeVisible();
+  });
+});
+
+test.describe('API Server - Error Handling', () => {
+  test('should handle empty CSS gracefully', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('Root', { exact: true })).toBeVisible();
+
+    // Send empty CSS via page evaluate
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/api/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ css: '' }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBeTruthy();
+  });
+
+  test('should handle missing CSS field gracefully', async ({ page }) => {
+    await page.goto('/');
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/api/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.body.error).toContain('No CSS provided');
+  });
+
+  test('should parse valid CSS and return correct structure', async ({ page }) => {
+    await page.goto('/');
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/api/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ css: 'body { color: red; }' }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.type).toBe('root');
+    expect(result.body.children).toHaveLength(1);
+    expect(result.body.children[0].type).toBe('rule');
+    expect(result.body.children[0].selector).toBe('body');
+  });
+});
